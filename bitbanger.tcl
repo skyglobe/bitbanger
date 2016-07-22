@@ -39,12 +39,12 @@ proc dec2bin {num {digits 32}} {
                 if {$digits == 0} break
                 set num [expr $num / 2]
             }
-            
+
             while {$digits > 0} {
                 lappend output 0
                 incr digits -1
             }
-                        
+
             return [lreverse $output]
         } else {
             error "Invalid number: $num"
@@ -87,10 +87,45 @@ proc hex2dec {num} {
     }
 }
 
+#Builds a point specification for a waveform polyline
+proc waveCoords {binvals start middle offset} {
+    set output [list]
+    set prevBit [lindex $binvals 0]
+    set hPos $start
+    set vPos ""
+    set top "[expr $middle - $offset]m"
+    set bot "[expr $middle + $offset]m"
+    if {$prevBit} {set vPos $top} else {set vPos $bot}
+    #First point
+    set output [lappend output "${start}m"]
+    set output [lappend output "$vPos"]
+    foreach bit $binvals {
+        #Refresh vPos
+        if {$bit} {set vPos $top} else {set vPos $bot}
+
+        if {$prevBit != $bit} {
+            #Keep X Coordinate
+            set output [lappend output "${hPos}m"]
+            #Add Y Coordinate
+            set output [lappend output "$vPos"]
+        }
+
+        #Plot horizontal line
+        set hPos [expr $hPos + 2 * $offset]
+        set output [lappend output "${hPos}m"]
+        set output [lappend output "$vPos"]
+        #Save previous bit
+        set prevBit $bit
+    }
+    return $output
+}
+
 #Globals
 set decimalval 0
 set hexval 0
 set binval [list]
+set wordstack [list]
+set byteSelected 0
 
 #Intialize binval list
 for {set i 0} {$i < 32} {incr i} {
@@ -110,6 +145,22 @@ for {set i 0} {$i < 32} {incr i} {
     eval "label .bin$i -text 0 -relief sunken"
     eval "label .binLabel$i -text $i"
 }
+
+#Waveform canvas
+canvas .wfc -height 1c
+
+#Word stack controls
+button .btnAppend -text "Append Word" -command appendBinWord
+frame .frmByteSel
+radiobutton .frmByteSel.rdo0 -text "0:7" -variable byteSelected -value 0
+radiobutton .frmByteSel.rdo1 -text "8:15" -variable byteSelected -value 1
+radiobutton .frmByteSel.rdo2 -text "16:23" -variable byteSelected -value 2
+radiobutton .frmByteSel.rdo3 -text "24:31" -variable byteSelected -value 3
+
+#Word stack canvas
+canvas .wsc -height 8c
+button .btnUpdate -text "Update Waveforms" -command updateWaveForms
+button .btnClear -text "Clear Waveforms" -command clearWordStack
 
 #Set window title
 wm title . "Bit Banger"
@@ -133,6 +184,24 @@ for {set i 31} {$i >= 0} {incr i -1} {
     grid columnconfigure . [expr 31 - $i] -weight 1 -uniform a
 }
 
+#Row 4: the waveform canvas
+grid .wfc -row 4 -column 0 -columnspan 32 -sticky ew
+
+#Row 5: Word stack controls
+grid .btnAppend -row 5 -column 0 -columnspan 16 -sticky ew
+grid .frmByteSel -row 5 -column 16 -columnspan 16 -sticky ew
+grid .frmByteSel.rdo0 -row 0 -column 0
+grid .frmByteSel.rdo1 -row 0 -column 1
+grid .frmByteSel.rdo2 -row 0 -column 2
+grid .frmByteSel.rdo3 -row 0 -column 3
+
+#Row 6: Word stack canvas
+grid .wsc -row 6 -column 0 -columnspan 32 -sticky ew
+
+#Row 7: Update button
+grid .btnUpdate -row 7 -column 0 -columnspan 16 -sticky ew
+grid .btnClear -row 7 -column 16 -columnspan 16 -sticky ew
+
 #Disable window resize
 wm resizable . 0 0
 
@@ -145,6 +214,9 @@ proc changeBinText {} {
     for {set i 0} {$i < 32} {incr i} {
         .bin$i configure -text [lindex $binval $i]
     }
+    set coords [waveCoords $binval 2.5 3 2.5]
+    .wfc delete all
+    .wfc create line $coords
 }
 
 proc toggleBit {index} {
@@ -181,6 +253,56 @@ proc hexChanged {} {
     set decimalval [hex2dec $hexval]
     set binval [dec2bin $decimalval]
     changeBinText
+}
+
+proc appendBinWord {} {
+    global wordstack binval
+    if {[llength $wordstack] > 32} {
+        unset wordstack
+        set wordstack [list]
+    }
+    set wordstack [lappend wordstack $binval]
+}
+
+proc clearWordStack {} {
+    global wordstack
+    unset wordstack
+    set wordstack [list]
+    .wsc delete all
+}
+
+proc updateWaveForms {} {
+    global wordstack byteSelected
+    set indices [list]
+
+    switch -exact $byteSelected {
+        0 {set indices {24 31}}
+        1 {set indices {16 23}}
+        2 {set indices {8 15}}
+        3 {set indices {0 7}}
+    }
+
+    #Waveform words
+    for {set i 0} {$i < 8} {incr i} {
+        set word$i [list]
+    }
+
+    #Build waveform words
+    foreach w $wordstack {
+        set slice [lreverse [lrange $w [lindex $indices 0] [lindex $indices 1]]]
+        for {set i 0} {$i < 8} {incr i} {
+            set word$i [lappend word$i [lindex $slice $i]]
+        }
+    }
+
+    #Clear canvas
+    .wsc delete all
+
+    #Plot waveforms
+    for {set i 0} {$i < 8} {incr i} {
+        set v [set word$i]
+        .wsc create line [waveCoords $v 2.5 [expr ($i + 1) * 7] 2.5]
+    }
 }
 
 #Bindings
