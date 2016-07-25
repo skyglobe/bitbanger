@@ -81,7 +81,7 @@ proc dec2hex {num} {
 
 proc hex2dec {num} {
     if {[string is xdigit $num]} {
-        return [scan $num %X]
+        return [scan $num %x]
         } else {
         error "Invalid number: $num"
     }
@@ -147,7 +147,7 @@ for {set i 0} {$i < 32} {incr i} {
 }
 
 #Waveform canvas
-canvas .wfc -height 1c
+canvas .wfc -height 1c -width 165m
 
 #Word stack controls
 button .btnAppend -text "Append Word" -command appendBinWord
