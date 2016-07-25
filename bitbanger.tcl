@@ -120,12 +120,39 @@ proc waveCoords {binvals start middle offset} {
     return $output
 }
 
+#Returns a list of segments to draw a reference grid
+proc gridCoords {start middle offset {points 32}} {
+    set top "[expr $middle - $offset]m"
+    set bot "[expr $middle + $offset]m"
+    set hPos $start
+    set hStep [expr 2 * $offset]
+    set end [expr $start + $points * $hStep]
+
+    #Bottom line first point
+    set pointList [list "${start}m" $bot]
+    #Bottom line end point
+    set pointList [lappend pointList "${end}m" $bot]
+
+    set output [lappend output $pointList]
+
+    #Vertical segments
+    for {set i 0} {$i < $points} {incr i} {
+        set hPos [expr $hPos + $hStep]
+        set pointList [list "${hPos}m" $top]
+        set pointList [lappend pointList "${hPos}m" $bot]
+        set output [lappend output $pointList]
+    }
+
+    return $output
+}
+
 #Globals
 set decimalval 0
 set hexval 0
 set binval [list]
 set wordstack [list]
 set byteSelected 0
+set gridVisible 0
 
 #Intialize binval list
 for {set i 0} {$i < 32} {incr i} {
@@ -156,6 +183,7 @@ radiobutton .frmByteSel.rdo0 -text "0:7" -variable byteSelected -value 0
 radiobutton .frmByteSel.rdo1 -text "8:15" -variable byteSelected -value 1
 radiobutton .frmByteSel.rdo2 -text "16:23" -variable byteSelected -value 2
 radiobutton .frmByteSel.rdo3 -text "24:31" -variable byteSelected -value 3
+checkbutton .frmByteSel.chkGrid -text "Grid" -variable gridVisible
 
 #Word stack canvas
 canvas .wsc -height 8c
@@ -194,6 +222,7 @@ grid .frmByteSel.rdo0 -row 0 -column 0
 grid .frmByteSel.rdo1 -row 0 -column 1
 grid .frmByteSel.rdo2 -row 0 -column 2
 grid .frmByteSel.rdo3 -row 0 -column 3
+grid .frmByteSel.chkGrid -row 0 -column 4
 
 #Row 6: Word stack canvas
 grid .wsc -row 6 -column 0 -columnspan 32 -sticky ew
@@ -272,7 +301,7 @@ proc clearWordStack {} {
 }
 
 proc updateWaveForms {} {
-    global wordstack byteSelected
+    global wordstack byteSelected gridVisible
     set indices [list]
 
     switch -exact $byteSelected {
@@ -300,8 +329,17 @@ proc updateWaveForms {} {
 
     #Plot waveforms
     for {set i 0} {$i < 8} {incr i} {
+        set middle [expr ($i + 1) * 7]
+
+        if {$gridVisible} {
+            #Draw reference grid
+            foreach l [gridCoords 2.5 $middle 2.5 [llength $wordstack]] {
+            .wsc create line $l -dash .
+            }
+        }
+
         set v [set word$i]
-        .wsc create line [waveCoords $v 2.5 [expr ($i + 1) * 7] 2.5]
+        .wsc create line [waveCoords $v 2.5 $middle 2.5]
     }
 }
 
